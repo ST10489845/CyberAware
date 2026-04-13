@@ -1,0 +1,130 @@
+name: CyberAware CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    name: Build & Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        # Linux removed because System.Windows.Extensions is Windows-specific
+        # Add Linux back if you create a cross-platform audio solution
+        # include:
+        #   - os: windows-latest
+        #     runtime: win-x64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Cache NuGet packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      
+      - name: Restore dependencies
+        run: dotnet restore CyberAware.csproj
+      
+      - name: Build solution
+        run: dotnet build CyberAware.csproj --no-restore --configuration Release
+      
+      - name: Publish application
+        run: dotnet publish CyberAware.csproj --configuration Release --runtime win-x64 --self-contained false --output ./publish
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberAware-windows-x64
+          path: ./publish/
+          retention-days: 7
+          if-no-files-found: error
+
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Restore dependencies
+        run: dotnet restore CyberAware.csproj
+      
+      - name: Build for analysis
+        run: dotnet build CyberAware.csproj --configuration Release --no-restore
+      
+      - name: Run format validation
+        run: dotnet format CyberAware.csproj --verify-no-changes --severity info || true
+
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Restore dependencies
+        run: dotnet restore CyberAware.csproj
+      
+      - name: Run security audit
+        run: dotnet list CyberAware.csproj package --vulnerable --include-transitive || true
+
+  create-release:
+    name: Create Release Package
+    needs: [build-and-test, code-quality, dependency-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CyberAware-windows-x64
+          path: ./release/windows
+      
+      - name: Create Windows ZIP archive
+        run: |
+          cd ./release/windows
+          zip -r ../CyberAware-Windows-x64.zip .
+          echo "Windows ZIP created successfully"
+        shell: bash
+      
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberAware-Release
+          path: ./release/*.zip
+          retention-days: 30
