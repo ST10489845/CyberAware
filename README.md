@@ -10,27 +10,13 @@
 
 An interactive command-line chatbot that educates users about cybersecurity threats and best practices
 
-[Features](#features) • [Installation](#installation) • [Usage](#usage) • [Architecture](#architecture) • [Troubleshooting](#troubleshooting)
+
 
 </div>
 
 
 
- Table of Contents
-
-- [About The Project](#about-the-project)
-- [Features](#features)
-- [Project Structure](#project-structure)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage Guide](#usage-guide)
-- [Audio Setup](#audio-setup)
-- [Architecture Overview](#architecture-overview)
-- [Code Documentation](#code-documentation)
-- [CI/CD Pipeline](#cicd-pipeline)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+ 
 
 
 
@@ -77,6 +63,7 @@ CyberAware is a comprehensive cybersecurity awareness chatbot built with C# and 
 | `how are you` | Greeting response |
 | `who are you` | Bot identity |
 
+<img width="1892" height="640" alt="image" src="https://github.com/user-attachments/assets/78a0ac72-4b30-400f-9ef5-53430a04ad6e" />
 
 
  
