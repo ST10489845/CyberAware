@@ -1,0 +1,166 @@
+name: CyberAware CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    name: Build & Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            runtime: win-x64
+          - os: ubuntu-latest
+            runtime: linux-x64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Debug - List files
+        run: ls -la
+        shell: bash
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Cache NuGet packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      
+      - name: Restore dependencies
+        run: dotnet restore CyberAware.csproj
+        working-directory: ${{ github.workspace }}
+      
+      - name: Build solution
+        run: dotnet build CyberAware.csproj --no-restore --configuration Release
+        working-directory: ${{ github.workspace }}
+      
+      - name: Run tests (placeholder - add tests later)
+        run: echo "No tests configured yet. Add xUnit/NUnit tests to enable this step."
+        working-directory: ${{ github.workspace }}
+      
+      - name: Publish for ${{ matrix.os }}
+        run: |
+          dotnet publish CyberAware.csproj `
+            --configuration Release `
+            --runtime ${{ matrix.runtime }} `
+            --self-contained false `
+            --output ./publish/${{ matrix.runtime }}
+        working-directory: ${{ github.workspace }}
+        shell: pwsh
+      
+      - name: Upload build artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberAware-windows-x64
+          path: ${{ github.workspace }}/publish/win-x64/
+          retention-days: 7
+      
+      - name: Upload build artifacts (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberAware-linux-x64
+          path: ${{ github.workspace }}/publish/linux-x64/
+          retention-days: 7
+
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Restore dependencies
+        run: dotnet restore CyberAware.csproj
+        working-directory: ${{ github.workspace }}
+      
+      - name: Run Format Validation
+        run: |
+          dotnet format CyberAware.csproj --verify-no-changes --severity info || true
+        working-directory: ${{ github.workspace }}
+      
+      - name: Build for analysis
+        run: dotnet build CyberAware.csproj --configuration Release --no-restore
+        working-directory: ${{ github.workspace }}
+
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Restore dependencies
+        run: dotnet restore CyberAware.csproj
+        working-directory: ${{ github.workspace }}
+      
+      - name: Run security audit
+        run: dotnet list CyberAware.csproj package --vulnerable --include-transitive || true
+        working-directory: ${{ github.workspace }}
+
+  create-release:
+    name: Create Release Package
+    needs: [build-and-test, code-quality, dependency-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CyberAware-windows-x64
+          path: ./release/windows
+      
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CyberAware-linux-x64
+          path: ./release/linux
+      
+      - name: Create ZIP archives
+        run: |
+          cd ./release/windows && zip -r ../CyberAware-Windows-x64.zip .
+          cd ./release/linux && zip -r ../CyberAware-Linux-x64.zip .
+        shell: bash
+      
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberAware-Releases
+          path: ./release/*.zip
+          retention-days: 30
